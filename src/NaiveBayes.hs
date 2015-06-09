@@ -1,6 +1,9 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE QuasiQuotes #-}
@@ -10,10 +13,12 @@ module NaiveBayes where
 import qualified Control.Foldl as L
 import           Control.Lens
 import qualified Data.Foldable as F
+import qualified Data.Vinyl as V
 import           Frames
 import           Frames.CSV
 import           Frames.InCore
 import           Frames.Rec
+import           Linear
 import           Pipes
 import qualified Pipes as P
 import qualified Pipes.Prelude as P
@@ -71,6 +76,27 @@ distributions f =
   ,parameterDistribution sepalWidth f
   ,parameterDistribution petalLength f
   ,parameterDistribution petalWidth f)
+
+mean' :: (AllAre Double (UnColumn rs),AsVinyl rs)
+      => Frame (Record rs) -> [Double]
+mean' f = fmap (/ (fromIntegral $ frameLength f)) $ L.fold meanFold f
+
+meanFold :: (AllAre Double (UnColumn rs),AsVinyl rs)
+         => L.Fold (Record rs) [Double]
+meanFold =
+  L.Fold (\acc args -> recToList args ^+^ acc)
+         zero
+         id
+
+var' :: (AllAre Double (UnColumn rs),AsVinyl rs)
+     => Frame (Record rs) -> [Double]
+var' f = fmap (/ (fromIntegral $ frameLength f)) $ L.fold (varFold (mean' f)) f
+
+varFold :: (AllAre Double (UnColumn rs),AsVinyl rs) => [Double] -> L.Fold (Record rs) [Double]
+varFold mean = L.Fold (\acc args -> fmap (**2) (recToList args ^-^ mean) ^+^ acc) zero id
+
+distributions' :: (AllAre Double (UnColumn rs),AsVinyl rs) => Frame (Record rs) -> [Distribution]
+distributions' f = zipWith Distribution (var' f) (mean' f)
 
 filter' :: RecVec rs => (Record rs -> Bool) -> FrameRec rs -> IO (FrameRec rs)
 filter' p f = inCoreAoS $ (P.each f) >-> P.filter p
