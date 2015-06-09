@@ -3,3 +3,5 @@
 /dist/
 *~
 *#
+/.stack-work/
+/dist-stack/

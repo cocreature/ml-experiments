@@ -1,0 +1,9 @@
+flags: {}
+packages:
+- '.'
+- '../../haskell/Frames'
+extra-deps:
+- readable-0.3.1
+- vinyl-0.5.1
+- boxes-0.1.4
+resolver: nightly-2015-06-09
