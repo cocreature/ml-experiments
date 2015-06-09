@@ -57,16 +57,18 @@ executable ml-experiments
   -- other-extensions:    
   
   -- Other library packages from which modules are imported.
-  build-depends:       Frames >=0.1 && <0.2
-                     , base >=4.8 && <4.9
-                     , containers >=0.5 && <0.6
-                     , foldl >=1.1 && <1.2
-                     , lens >=4.9 && <4.12
-                     , pipes >=4.1 && <4.2
-                     , readable >=0.3 && <0.4
-                     , vector >=0.10 && <0.11
-                     , boxes >=0.1 && <0.2
-                     , extra >=1.2 && <1.3
+  build-depends:       Frames >= 0.1 && < 0.2
+                     , base >= 4.8 && < 4.9
+                     , boxes >= 0.1 && < 0.2
+                     , containers >= 0.5 && < 0.6
+                     , extra >= 1.2 && < 1.3
+                     , foldl >= 1.1 && < 1.2
+                     , lens >= 4.9 && < 4.12
+                     , pipes >= 4.1 && < 4.2
+                     , readable >= 0.3 && < 0.4
+                     , vector >= 0.10 && < 0.11
+                     , vinyl >= 0.5 && < 0.6
+                     , linear >= 1.18 && < 1.19
   
   -- Directories containing source files.
   hs-source-dirs:      src
