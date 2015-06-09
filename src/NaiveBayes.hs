@@ -1,5 +1,4 @@
 {-# LANGUAGE TypeOperators #-}
-
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
