@@ -52,38 +52,10 @@ classVals = fmap (view species)
 
 data Distribution = Distribution { variance :: Double, mean :: Double } deriving (Show,Eq,Ord)
 
-parameterMean :: Lens' Parameters Double -> Frame Parameters -> Double
-parameterMean l f =
-  L.fold L.sum (fmap (view l) f) /
-  (fromIntegral $
-   L.fold L.length f)
-
-parameterVar :: Lens' Parameters Double -> Frame Parameters -> Double
-parameterVar l f =
-  let m = parameterMean l f
-  in L.fold L.sum
-            (fmap (\r ->
-                     (view l r - m) ^ 2) f) /
-               (fromIntegral $
-                L.fold L.length f)
-
-parameterDistribution :: Lens' Parameters Double -> Frame Parameters -> Distribution
-parameterDistribution l f = let m = parameterMean l f
-                                v = parameterVar l f
-                            in
-                            Distribution {mean = m, variance = v}
-
 data ClassDistribution =
   ClassDistribution {classProp :: Double
                     ,distrs :: (Distribution,Distribution,Distribution,Distribution)} deriving (Show,Eq,Ord)
 
-
-distributions :: Frame Parameters -> (Distribution,Distribution,Distribution,Distribution)
-distributions f =
-  (parameterDistribution sepalLength f
-  ,parameterDistribution sepalWidth f
-  ,parameterDistribution petalLength f
-  ,parameterDistribution petalWidth f)
 
 mean' :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s:->c'))
       => Proxy c -> Frame (Record rs) -> M.Map c' [Double]
@@ -102,15 +74,6 @@ sumFold p =
               m)
          M.empty
          id
-
-proxySing :: Proxy c -> Proxy '[c]
-proxySing Proxy = Proxy
-
-single :: Record '[s:->x] -> x
-single = singleV . toVinyl
-
-singleV :: V.Rec V.Identity '[x] -> x
-singleV (V.Identity x V.:& V.RNil) = x
 
 var' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s :-> c'))
      => Proxy c -> Frame (Record rs) -> M.Map c' [Double]
@@ -132,13 +95,29 @@ varFold mean p =
          M.empty
          id
 
-getSingle :: RElem (s :-> x) rs (V.RIndex (s :-> x) rs)
-          => Proxy (s :-> x) -> Record rs -> x
-getSingle p args = single $ select (proxySing p) args
+classProps :: Ord c => Frame (Record '[s:->c]) -> M.Map c Double
+classProps f = M.map (/ fromIntegral (frameLength f)) $ L.fold classPropFold f
+
+classPropFold :: Ord c => L.Fold (Record '[s:->c]) (M.Map c Double)
+classPropFold = L.Fold (\m args -> M.insertWith (+) (single args) 1 m) M.empty id
 
 distributions' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s :-> c'))
-               => Proxy c -> Frame (Record rs) -> M.Map c' [Distribution]
-distributions' p f = M.intersectionWith (zipWith Distribution) (var' p f) (mean' p f)
+               => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution
+distributions' p f =
+  M.intersectionWith
+    (\cl distrs ->
+                ClassDistribution cl
+                                  (dumb distrs))
+    (classProps (fmap (select (proxySing p)) f)) $
+  M.intersectionWith (zipWith Distribution)
+                     (var' p f)
+                     (mean' p f)
+
+dumb :: [a] -> (a,a,a,a)
+dumb [a,b,c,d] = (a,b,c,d)
+
+dumb2 :: [a] -> (a,a,a)
+dumb2 [a,b,c] = (a,b,c)
 
 filter' :: RecVec rs => (Record rs -> Bool) -> FrameRec rs -> IO (FrameRec rs)
 filter' p f = inCoreAoS $ (P.each f) >-> P.filter p
@@ -152,25 +131,8 @@ versicolor = filter' ((==Versicolor) . view species)
 setosa :: Frame Iris -> IO (Frame Iris)
 setosa = filter' ((==Setosa) . view species)
 
-getDistributions :: Frame Iris -> IO (ClassDistribution,ClassDistribution,ClassDistribution)
-getDistributions f =
-  do virginica' <- virginica f
-     versicolor' <- versicolor f
-     setosa' <- setosa f
-     let virginicaDistr =
-           distributions (parameters virginica')
-         versicolorDistr =
-           distributions (parameters versicolor')
-         setosaDistr =
-           distributions (parameters setosa')
-     return (ClassDistribution (classProp virginica')
-                               virginicaDistr
-            ,ClassDistribution (classProp versicolor')
-                               versicolorDistr
-            ,ClassDistribution (classProp setosa')
-                               setosaDistr)
-  where n = fromIntegral (frameLength f)
-        classProp x = fromIntegral (frameLength x) / n
+getDistributions :: Frame Iris -> M.Map Class ClassDistribution
+getDistributions f = distributions' [pr|Species|] f
 
 gaussian :: Distribution -> Double -> Double
 gaussian (Distribution{..}) x =
@@ -203,10 +165,9 @@ predict' f (a,b,c) =
        parameters f)
       (F.toList $ classVals f)
 
-
 runNaiveBayes :: IO ()
 runNaiveBayes =
   do iris <- loadIris
-     distrs <- getDistributions iris
+     let distrs = getDistributions iris
      putStrLn (formatTable $
-               predict' iris distrs)
+               predict' iris (distrs M.! Virginica, distrs M.! Versicolor, distrs M.! Setosa))

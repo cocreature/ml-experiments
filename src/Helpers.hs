@@ -1,3 +1,4 @@
+{-# LANGUAGE TypeOperators #-}
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -12,7 +13,9 @@ import           Data.Maybe
 import           Data.Proxy
 import           Data.Vinyl
 import qualified Data.Vinyl as V
-import           Data.Vinyl.TypeLevel
+import qualified Data.Vinyl.Functor as V
+import qualified Data.Vinyl.TypeLevel as V
+import           Frames
 import           Frames.RecF
 import           Frames.TypeLevel
 import           Text.PrettyPrint.Boxes
@@ -49,3 +52,16 @@ combineRecordV _ f = go
 
 combineRecord :: forall f c ts. (Applicative f,LAll c (UnColumn ts),AsVinyl ts) => Proxy c -> (forall a. c a => a -> a -> a) -> Rec f ts -> Rec f ts -> Rec f ts
 combineRecord p f f1 f2 = fromVinyl $ combineRecordV p f (toVinyl f1) (toVinyl f2)
+
+proxySing :: Proxy c -> Proxy '[c]
+proxySing Proxy = Proxy
+
+single :: Record '[s:->x] -> x
+single = singleV . toVinyl
+
+singleV :: V.Rec V.Identity '[x] -> x
+singleV (V.Identity x V.:& V.RNil) = x
+
+getSingle :: RElem (s :-> x) rs (V.RIndex (s :-> x) rs)
+          => Proxy (s :-> x) -> Record rs -> x
+getSingle p args = single $ select (proxySing p) args
