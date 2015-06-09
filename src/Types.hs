@@ -11,7 +11,7 @@ import Frames.ColumnTypeable
 import Data.Readable
 import Data.Vector
 
-data Class = Setosa | Versicolor | Virginica deriving (Show,Eq,Ord,Enum)
+data Class = Setosa | Versicolor | Virginica deriving (Show,Eq,Ord,Enum,Bounded)
 
 instance Readable Class where
   fromText "virginica" = return Virginica

@@ -1,11 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ConstraintKinds, DataKinds, FlexibleContexts, GADTs,
              OverloadedStrings, PatternSynonyms, QuasiQuotes,
              ScopedTypeVariables, TemplateHaskell, TypeOperators,
              ViewPatterns #-}
 module Main where
 
+import Helpers
 import Data.Maybe
 import Data.List.Extra hiding (lookup)
 import Text.PrettyPrint.Boxes
@@ -144,27 +146,3 @@ predict' f (a,b,c) =
        fmap (predict (a,b,c)) $
        parameters f)
       (F.toList $ classVals f)
-
-formatTable :: [(Class,Class)] -> String
-formatTable xs =
-  let counts' =
-        foldr (\x m -> insertWith (+) x 1 m) empty xs
-      counts =
-        chunksOf 3 $
-        map (text . show) $
-        map (\x ->
-               fromMaybe 0 $
-               M.lookup x counts')
-            (map (\[x,y] -> (x,y)) $
-             replicateM 2
-                        (enumFrom Setosa))
-      classNames =
-        map (text . show) $
-        enumFrom Setosa
-  in render $
-     hsep 1
-          bottom
-          (map (vsep 1 right)
-               (zipWith (:) (nullBox : classNames) $
-                transpose $
-                zipWith (:) (classNames) counts))
