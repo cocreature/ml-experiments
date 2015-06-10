@@ -1,6 +1,6 @@
 module Main where
 
-import NaiveBayes
+import IrisDemo
 
 main :: IO ()
 main = runNaiveBayes

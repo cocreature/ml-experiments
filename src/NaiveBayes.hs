@@ -12,10 +12,10 @@
 
 module NaiveBayes where
 
-import           Control.Applicative
 import qualified Control.Foldl as L
 import           Control.Lens
 import qualified Data.Foldable as F
+import           Data.List
 import qualified Data.Map.Strict as M
 import           Data.Proxy
 import qualified Data.Vinyl as V
@@ -32,22 +32,6 @@ import qualified Pipes.Prelude as P
 
 import           Helpers
 import           Types
-
-tableTypes' rowGen {columnUniverse = $(colQ ''MyColumns), rowTypeName = "Iris" } "iris.dat"
-
-irisStream :: Producer Iris IO ()
-irisStream = readTableOpt irisParser "iris.dat"
-
-loadIris :: IO (Frame Iris)
-loadIris = inCoreAoS irisStream
-
-type Parameters = Record '[SepalLength,SepalWidth,PetalLength,PetalWidth]
-
-parameters :: Frame Iris -> Frame Parameters
-parameters = fmap (rdel [pr|Species|])
-
-classVals :: Frame Iris -> Frame Class
-classVals = fmap (view species)
 
 data Distribution = Distribution { variance :: Double, mean :: Double } deriving (Show,Eq,Ord)
 
@@ -110,15 +94,6 @@ distributions' p f =
                      (var' p f)
                      (mean' p f)
 
-dumb2 :: [a] -> (a,a,a)
-dumb2 [a,b,c] = (a,b,c)
-
-filter' :: RecVec rs => (Record rs -> Bool) -> FrameRec rs -> IO (FrameRec rs)
-filter' p f = inCoreAoS $ (P.each f) >-> P.filter p
-
-getDistributions :: Frame Iris -> M.Map Class ClassDistribution
-getDistributions f = distributions' [pr|Species|] f
-
 gaussian :: Distribution -> Double -> Double
 gaussian (Distribution{..}) x =
   1 /
@@ -127,29 +102,17 @@ gaussian (Distribution{..}) x =
        2 /
        (2 * variance))
 
-classConditional :: ClassDistribution -> Parameters -> Double
+classConditional :: (AllAre Double (UnColumn rs),AsVinyl rs) => ClassDistribution -> Record rs -> Double
 classConditional (ClassDistribution _ distrs) p =
   product $ zipWith gaussian distrs (recToList p)
 
-predict :: (ClassDistribution,ClassDistribution,ClassDistribution) -> Parameters -> Class
-predict (a,b,c) p
-  | pa >= pb && pa >= pc = Virginica
-  | pb >= pa && pb >= pc = Versicolor
-  | pc >= pa && pc >= pb = Setosa
-  where pa = classConditional a p * (classProp a)
-        pb = classConditional b p * (classProp b)
-        pc = classConditional c p * (classProp c)
+predict :: (AllAre Double (UnColumn rs),AsVinyl rs) => M.Map c ClassDistribution -> Record rs -> c
+predict m p = fst $ maxValue $ M.mapWithKey (\k a -> classConditional a p * classProp a) m
 
-predict' :: Frame Iris -> (ClassDistribution,ClassDistribution,ClassDistribution) -> [(Class,Class)]
-predict' f (a,b,c) =
+
+predict' :: (CanDelete c rs, rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s:->c')) => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution -> [(c',c')]
+predict' p f m =
   zip (F.toList $
-       fmap (predict (a,b,c)) $
-       parameters f)
-      (F.toList $ classVals f)
-
-runNaiveBayes :: IO ()
-runNaiveBayes =
-  do iris <- loadIris
-     let distrs = getDistributions iris
-     putStrLn (formatTable $
-               predict' iris (distrs M.! Virginica, distrs M.! Versicolor, distrs M.! Setosa))
+       fmap (predict m) $
+       fmap (rdel p) f)
+      (F.toList $ fmap (getSingle p) f)

@@ -7,6 +7,7 @@ module Helpers where
 
 import           Control.Applicative hiding (empty)
 import           Control.Monad
+import           Data.Function
 import           Data.List.Extra
 import           Data.Map as M hiding (map,foldr)
 import           Data.Maybe
@@ -65,3 +66,6 @@ singleV (V.Identity x V.:& V.RNil) = x
 getSingle :: RElem (s :-> x) rs (V.RIndex (s :-> x) rs)
           => Proxy (s :-> x) -> Record rs -> x
 getSingle p args = single $ select (proxySing p) args
+
+maxValue :: Ord a => M.Map k a -> (k,a)
+maxValue = head . sortBy (flip (on compare snd)) . M.toList
