@@ -116,15 +116,6 @@ dumb2 [a,b,c] = (a,b,c)
 filter' :: RecVec rs => (Record rs -> Bool) -> FrameRec rs -> IO (FrameRec rs)
 filter' p f = inCoreAoS $ (P.each f) >-> P.filter p
 
-virginica :: Frame Iris -> IO (Frame Iris)
-virginica = filter' ((==Virginica) . view species)
-
-versicolor :: Frame Iris -> IO (Frame Iris)
-versicolor = filter' ((==Versicolor) . view species)
-
-setosa :: Frame Iris -> IO (Frame Iris)
-setosa = filter' ((==Setosa) . view species)
-
 getDistributions :: Frame Iris -> M.Map Class ClassDistribution
 getDistributions f = distributions' [pr|Species|] f
 
