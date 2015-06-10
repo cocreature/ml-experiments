@@ -53,7 +53,7 @@ data Distribution = Distribution { variance :: Double, mean :: Double } deriving
 
 data ClassDistribution =
   ClassDistribution {classProp :: Double
-                    ,distrs :: (Distribution,Distribution,Distribution,Distribution)} deriving (Show,Eq,Ord)
+                    ,distrs :: [Distribution]} deriving (Show,Eq,Ord)
 
 
 mean' :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s:->c'))
@@ -104,16 +104,11 @@ distributions' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,AllAre Double (UnCol
                => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution
 distributions' p f =
   M.intersectionWith
-    (\cl distrs ->
-                ClassDistribution cl
-                                  (dumb distrs))
+    ClassDistribution
     (classProps (fmap (select (proxySing p)) f)) $
   M.intersectionWith (zipWith Distribution)
                      (var' p f)
                      (mean' p f)
-
-dumb :: [a] -> (a,a,a,a)
-dumb [a,b,c,d] = (a,b,c,d)
 
 dumb2 :: [a] -> (a,a,a)
 dumb2 [a,b,c] = (a,b,c)
@@ -142,11 +137,8 @@ gaussian (Distribution{..}) x =
        (2 * variance))
 
 classConditional :: ClassDistribution -> Parameters -> Double
-classConditional (ClassDistribution _ (a,b,c,d)) p =
-  gaussian a (p ^. sepalLength) *
-  gaussian b (p ^. sepalWidth) *
-  gaussian c (p ^. petalLength) *
-  gaussian d (p ^. petalWidth)
+classConditional (ClassDistribution _ distrs) p =
+  product $ zipWith gaussian distrs (recToList p)
 
 predict :: (ClassDistribution,ClassDistribution,ClassDistribution) -> Parameters -> Class
 predict (a,b,c) p
