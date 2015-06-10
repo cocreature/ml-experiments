@@ -20,6 +20,6 @@ loadIris = inCoreAoS irisStream
 runNaiveBayes :: IO ()
 runNaiveBayes =
   do iris <- loadIris
-     let distrs = distributions' [pr|Species|] iris
+     let distrs = distributions [pr|Species|] iris
      putStrLn (formatTable $
                predict' [pr|Species|] iris distrs)

@@ -17,6 +17,7 @@ import           Control.Lens
 import qualified Data.Foldable as F
 import           Data.List
 import qualified Data.Map.Strict as M
+import qualified Data.Map.Lazy as ML
 import           Data.Proxy
 import qualified Data.Vinyl as V
 import qualified Data.Vinyl.Functor as V
@@ -40,59 +41,30 @@ data ClassDistribution =
                     ,distrs :: [Distribution]} deriving (Show,Eq,Ord)
 
 type ConvertibleTo rs t = (AllAre t (UnColumn rs),AsVinyl rs)
-mean' :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s:->c'))
-      => Proxy c -> Frame (Record rs) -> M.Map c' [Double]
-mean' p f =
-  M.map (\(x,c) -> fmap (/ fromIntegral c) x) $ L.fold (sumFold p) f
 
-sumFold :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs, ConvertibleTo rs' Double,c ~ (s:->c'))
-          => Proxy c  -> L.Fold (Record rs) (M.Map c' ([Double],Int))
-sumFold p =
-  L.Fold (\m args ->
-            M.insertWith
-              (\(x,c) (x',c') ->
-                 (x ^+^ x',c + c'))
-              (getSingle p args)
-              (recToList (rdel p args),1)
-              m)
-         M.empty
-         id
+distributions :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
+                     => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution
+distributions p f =
+  let n = fromIntegral $ frameLength f
+      m' =
+        fmap (\(a,b,c) -> (fmap (/c) a, fmap (/c) b,c)) $ L.fold (L.Fold (\m args ->
+                          let k =
+                                getSingle p args
+                          in M.insertWith
+                               (\(x,y,c) (x',y',c') ->
+                                  (x ^+^ x',y ^+^ y',c + c'))
+                               k
+                               (fmap (** 2) $ -- variance
+                                recToList (rdel p args) ^-^
+                                view _2 (m' M.! k) -- get mean by tying the knot
+                               ,recToList (rdel p args) -- used for mean
+                               ,1) -- counter for each class
+                               m)
+                       M.empty
+                       id)
+               f
+  in M.map (\(var,mean,c) -> ClassDistribution (c / n) (zipWith Distribution var mean)) $ m'
 
-var' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
-     => Proxy c -> Frame (Record rs) -> M.Map c' [Double]
-var' p f = M.map (\(x,c) -> fmap (/ fromIntegral c) x) $ L.fold (varFold (mean' p f) p) f
-
-varFold :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
-        => (M.Map c' [Double]) -> Proxy c -> L.Fold (Record rs) (M.Map c' ([Double],Int))
-varFold mean p =
-  L.Fold (\m args -> let k = getSingle p args in
-            M.insertWith
-              (\(x,c) (x',c') ->
-                 (x ^+^ x',c + c'))
-              k
-              (fmap (** 2) $
-               recToList (rdel p args) ^-^
-               (mean M.! k)
-              ,1)
-              m)
-         M.empty
-         id
-
-classProps :: Ord c => Frame (Record '[s:->c]) -> M.Map c Double
-classProps f = M.map (/ fromIntegral (frameLength f)) $ L.fold classPropFold f
-
-classPropFold :: Ord c => L.Fold (Record '[s:->c]) (M.Map c Double)
-classPropFold = L.Fold (\m args -> M.insertWith (+) (single args) 1 m) M.empty id
-
-distributions' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
-               => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution
-distributions' p f =
-  M.intersectionWith
-    ClassDistribution
-    (classProps (fmap (select (proxySing p)) f)) $
-  M.intersectionWith (zipWith Distribution)
-                     (var' p f)
-                     (mean' p f)
 
 gaussian :: Distribution -> Double -> Double
 gaussian (Distribution{..}) x =
@@ -108,7 +80,6 @@ classConditional (ClassDistribution _ distrs) p =
 
 predict :: (ConvertibleTo rs Double) => M.Map c ClassDistribution -> Record rs -> c
 predict m p = fst $ maxValue $ M.mapWithKey (\k a -> classConditional a p * classProp a) m
-
 
 predict' :: (CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
          => Proxy c
