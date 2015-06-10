@@ -39,13 +39,13 @@ data ClassDistribution =
   ClassDistribution {classProp :: Double
                     ,distrs :: [Distribution]} deriving (Show,Eq,Ord)
 
-
-mean' :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s:->c'))
+type ConvertibleTo rs t = (AllAre t (UnColumn rs),AsVinyl rs)
+mean' :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s:->c'))
       => Proxy c -> Frame (Record rs) -> M.Map c' [Double]
 mean' p f =
   M.map (\(x,c) -> fmap (/ fromIntegral c) x) $ L.fold (sumFold p) f
 
-sumFold :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs, AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s:->c'))
+sumFold :: (Ord c', CanDelete c rs, rs' ~ RDelete c rs, ConvertibleTo rs' Double,c ~ (s:->c'))
           => Proxy c  -> L.Fold (Record rs) (M.Map c' ([Double],Int))
 sumFold p =
   L.Fold (\m args ->
@@ -58,11 +58,11 @@ sumFold p =
          M.empty
          id
 
-var' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s :-> c'))
+var' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
      => Proxy c -> Frame (Record rs) -> M.Map c' [Double]
 var' p f = M.map (\(x,c) -> fmap (/ fromIntegral c) x) $ L.fold (varFold (mean' p f) p) f
 
-varFold :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s :-> c'))
+varFold :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
         => (M.Map c' [Double]) -> Proxy c -> L.Fold (Record rs) (M.Map c' ([Double],Int))
 varFold mean p =
   L.Fold (\m args -> let k = getSingle p args in
@@ -84,7 +84,7 @@ classProps f = M.map (/ fromIntegral (frameLength f)) $ L.fold classPropFold f
 classPropFold :: Ord c => L.Fold (Record '[s:->c]) (M.Map c Double)
 classPropFold = L.Fold (\m args -> M.insertWith (+) (single args) 1 m) M.empty id
 
-distributions' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s :-> c'))
+distributions' :: (Ord c',CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
                => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution
 distributions' p f =
   M.intersectionWith
@@ -102,15 +102,19 @@ gaussian (Distribution{..}) x =
        2 /
        (2 * variance))
 
-classConditional :: (AllAre Double (UnColumn rs),AsVinyl rs) => ClassDistribution -> Record rs -> Double
+classConditional :: (ConvertibleTo rs Double) => ClassDistribution -> Record rs -> Double
 classConditional (ClassDistribution _ distrs) p =
   product $ zipWith gaussian distrs (recToList p)
 
-predict :: (AllAre Double (UnColumn rs),AsVinyl rs) => M.Map c ClassDistribution -> Record rs -> c
+predict :: (ConvertibleTo rs Double) => M.Map c ClassDistribution -> Record rs -> c
 predict m p = fst $ maxValue $ M.mapWithKey (\k a -> classConditional a p * classProp a) m
 
 
-predict' :: (CanDelete c rs, rs' ~ RDelete c rs,AllAre Double (UnColumn rs'),AsVinyl rs',c ~ (s:->c')) => Proxy c -> Frame (Record rs) -> M.Map c' ClassDistribution -> [(c',c')]
+predict' :: (CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
+         => Proxy c
+         -> Frame (Record rs)
+         -> M.Map c' ClassDistribution
+         -> [(c',c')]
 predict' p f m =
   zip (F.toList $
        fmap (predict m) $
