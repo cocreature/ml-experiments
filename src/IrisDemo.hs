@@ -22,4 +22,4 @@ runNaiveBayes =
   do iris <- loadIris
      let distrs = distributions [pr|Species|] iris
      putStrLn (formatTable $
-               predict' [pr|Species|] iris distrs)
+               predict [pr|Species|] iris distrs)

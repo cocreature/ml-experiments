@@ -78,16 +78,16 @@ classConditional :: (ConvertibleTo rs Double) => ClassDistribution -> Record rs 
 classConditional (ClassDistribution _ distrs) p =
   product $ zipWith gaussian distrs (recToList p)
 
-predict :: (ConvertibleTo rs Double) => M.Map c ClassDistribution -> Record rs -> c
-predict m p = fst $ maxValue $ M.mapWithKey (\k a -> classConditional a p * classProp a) m
+predictR :: (ConvertibleTo rs Double) => M.Map c ClassDistribution -> Record rs -> c
+predictR m p = fst $ maxValue $ M.mapWithKey (\k a -> classConditional a p * classProp a) m
 
-predict' :: (CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
-         => Proxy c
-         -> Frame (Record rs)
-         -> M.Map c' ClassDistribution
-         -> [(c',c')]
-predict' p f m =
+predict :: (CanDelete c rs,rs' ~ RDelete c rs,ConvertibleTo rs' Double,c ~ (s :-> c'))
+        => Proxy c
+        -> Frame (Record rs)
+        -> M.Map c' ClassDistribution
+        -> [(c',c')]
+predict p f m =
   zip (F.toList $
-       fmap (predict m) $
+       fmap (predictR m) $
        fmap (rdel p) f)
       (F.toList $ fmap (getSingle p) f)
